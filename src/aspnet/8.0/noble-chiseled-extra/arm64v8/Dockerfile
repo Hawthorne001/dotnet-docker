@@ -4,9 +4,9 @@ ARG REPO=mcr.microsoft.com/dotnet/runtime
 FROM arm64v8/buildpack-deps:noble-curl AS installer
 
 # Retrieve ASP.NET Core
-RUN aspnetcore_version=8.0.8 \
+RUN aspnetcore_version=8.0.11 \
     && curl -fSL --output aspnetcore.tar.gz https://dotnetcli.azureedge.net/dotnet/aspnetcore/Runtime/$aspnetcore_version/aspnetcore-runtime-$aspnetcore_version-linux-arm64.tar.gz \
-    && aspnetcore_sha512='c3dc9d71fca0a48eda96074cbcef4c9a265c1c4e10cbff38614dd74d79443ae9d1ccd10714764cd041291f81d83c0ed1c307abf89249ab4b6f58a5de952fcffd' \
+    && aspnetcore_sha512='75b5888b7d65cf9e971925e48962c0822f630390a3f0f04ce1d84546990fed312e8ae8513c82caeada145c2ac8de2b229fd1dad2d2df36c8e9db0df9f65595ac' \
     && echo "$aspnetcore_sha512  aspnetcore.tar.gz" | sha512sum -c - \
     && mkdir -p /dotnet \
     && tar -oxzf aspnetcore.tar.gz -C /dotnet ./shared/Microsoft.AspNetCore.App \
@@ -14,9 +14,9 @@ RUN aspnetcore_version=8.0.8 \
 
 
 # ASP.NET Core image
-FROM $REPO:8.0.8-noble-chiseled-extra-arm64v8
+FROM $REPO:8.0.11-noble-chiseled-extra-arm64v8
 
 # ASP.NET Core version
-ENV ASPNET_VERSION=8.0.8
+ENV ASPNET_VERSION=8.0.11
 
 COPY --from=installer ["/dotnet", "/usr/share/dotnet"]

@@ -1,5 +1,5 @@
 ARG REPO=mcr.microsoft.com/dotnet/aspnet
-FROM $REPO:6.0.33-alpine3.20-amd64
+FROM $REPO:6.0.36-alpine3.20-amd64
 
 ENV \
     # Unset ASPNETCORE_URLS from aspnet base image
@@ -9,7 +9,7 @@ ENV \
     # Do not show first run text
     DOTNET_NOLOGO=true \
     # SDK version
-    DOTNET_SDK_VERSION=6.0.425 \
+    DOTNET_SDK_VERSION=6.0.428 \
     # Disable the invariant mode (set in base image)
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
     # Enable correct mode for dotnet watch (only mode supported in a container)
@@ -27,7 +27,7 @@ RUN apk add --upgrade --no-cache \
 
 # Install .NET SDK
 RUN wget -O dotnet.tar.gz https://dotnetcli.azureedge.net/dotnet/Sdk/$DOTNET_SDK_VERSION/dotnet-sdk-$DOTNET_SDK_VERSION-linux-musl-x64.tar.gz \
-    && dotnet_sha512='cd9572358102b8214874ff353bbe826ac9ba0f0d26d49493f312a8a3bc7c0faba2fc82bd5dfb740289d3242dcdf78b341996d38623723c691be469375a72df9e' \
+    && dotnet_sha512='f57123d1465ccb0a1533b51d0995c513abeb0ffc15788bff8af4144e0dd30a2659db41bd2af4328ad637588156e2e649a0518247eefdf8942403939466561786' \
     && echo "$dotnet_sha512  dotnet.tar.gz" | sha512sum -c - \
     && mkdir -p /usr/share/dotnet \
     && tar -oxzf dotnet.tar.gz -C /usr/share/dotnet ./packs ./sdk ./sdk-manifests ./templates ./LICENSE.txt ./ThirdPartyNotices.txt \
@@ -36,9 +36,9 @@ RUN wget -O dotnet.tar.gz https://dotnetcli.azureedge.net/dotnet/Sdk/$DOTNET_SDK
     && dotnet help
 
 # Install PowerShell global tool
-RUN powershell_version=7.2.22 \
+RUN powershell_version=7.2.23 \
     && wget -O PowerShell.Linux.Alpine.$powershell_version.nupkg https://powershellinfraartifacts-gkhedzdeaghdezhr.z01.azurefd.net/tool/$powershell_version/PowerShell.Linux.Alpine.$powershell_version.nupkg \
-    && powershell_sha512='952e3ea0c84a6b0f321c09f2d36b458c2968f1393c527119d1371470c41ea77ef008e6abc0f31ead3fb47acb1fd8d54446f5965c15ac85ba3b70d784b676bdbc' \
+    && powershell_sha512='e585d88308c849556e39c54c185cb65f3f14a6e108d38428353e1e89804ec65e349118951e0ceea39caf394c177a09a564977d4f2909fdc5477fb700bc186152' \
     && echo "$powershell_sha512  PowerShell.Linux.Alpine.$powershell_version.nupkg" | sha512sum -c - \
     && mkdir -p /usr/share/powershell \
     && dotnet tool install --add-source / --tool-path /usr/share/powershell --version $powershell_version PowerShell.Linux.Alpine \

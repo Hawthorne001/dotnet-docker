@@ -13,9 +13,9 @@ namespace Microsoft.DotNet.Docker.Tests
     {
         private const string VariableGroupName = "variable";
         private const string VariablePattern = $"\\$\\((?<{VariableGroupName}>[\\w:\\-.|]+)\\)";
-        private static Lazy<JObject> Manifest { get; } = new Lazy<JObject>(() => LoadManifest("manifest.json"));
         private static Lazy<JObject> ManifestVersions { get; } = new Lazy<JObject>(() => LoadManifest("manifest.versions.json"));
 
+        public static Lazy<JObject> Manifest { get; } = new Lazy<JObject>(() => LoadManifest("manifest.json"));
         public static string SourceRepoRoot { get; } = Environment.GetEnvironmentVariable("SOURCE_REPO_ROOT") ?? string.Empty;
         public static bool IsHttpVerificationDisabled { get; } =
             Environment.GetEnvironmentVariable("DISABLE_HTTP_VERIFICATION") != null;
@@ -32,19 +32,14 @@ namespace Microsoft.DotNet.Docker.Tests
             (Environment.GetEnvironmentVariable("IMAGE_OS_NAMES") ?? string.Empty).Split(",", StringSplitOptions.RemoveEmptyEntries);
         public static string SourceBranch { get; } =
             Environment.GetEnvironmentVariable("SOURCE_BRANCH") ?? string.Empty;
-        public static string SasQueryString { get; } =
-            Environment.GetEnvironmentVariable("SAS_QUERY_STRING") ?? string.Empty;
-        public static string NuGetFeedPassword { get; } =
-            Environment.GetEnvironmentVariable("NUGET_FEED_PASSWORD") ?? string.Empty;
+        public static string InternalAccessToken { get; } =
+            Environment.GetEnvironmentVariable("INTERNAL_ACCESS_TOKEN") ?? string.Empty;
         public static string[] Paths { get; } =
             Environment.GetEnvironmentVariable("DOCKERFILE_PATHS")?
                 .Split(',', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
 
-        public static bool IsInternal(string dotnetVersion)
-        {
-            string versionBaseUrl = GetBaseUrl(dotnetVersion);
-            return versionBaseUrl.Contains("msrc") || versionBaseUrl.Contains("internal");
-        }
+        public static bool IsInternal { get; } =
+            Environment.GetEnvironmentVariable("INTERNAL_TESTING") != null;
 
         private static bool GetIsNightlyRepo()
         {
@@ -79,7 +74,7 @@ namespace Microsoft.DotNet.Docker.Tests
         }
 
         public static string GetBaseUrl(string dotnetVersion) =>
-            GetVariableValue($"base-url|{dotnetVersion}|{Config.SourceBranch}", (JObject)ManifestVersions.Value["variables"]);
+            GetVariableValue($"dotnet|{dotnetVersion}|base-url|{Config.SourceBranch}", (JObject)ManifestVersions.Value["variables"]);
 
         public static string GetBuildVersion(DotNetImageRepo imageRepo, string dotnetVersion)
         {

@@ -1,5 +1,5 @@
 ARG REPO=mcr.microsoft.com/dotnet/aspnet
-FROM $REPO:6.0.33-cbl-mariner2.0-amd64
+FROM $REPO:6.0.36-cbl-mariner2.0-amd64
 
 ENV \
     # Unset ASPNETCORE_URLS from aspnet base image
@@ -9,7 +9,7 @@ ENV \
     # Do not show first run text
     DOTNET_NOLOGO=true \
     # SDK version
-    DOTNET_SDK_VERSION=6.0.425 \
+    DOTNET_SDK_VERSION=6.0.428 \
     # Enable correct mode for dotnet watch (only mode supported in a container)
     DOTNET_USE_POLLING_FILE_WATCHER=true \
     # Skip extraction of XML docs - generally not useful within an image/container - helps performance
@@ -24,19 +24,19 @@ RUN tdnf install -y \
 
 # Install .NET SDK
 RUN curl -fSL --output dotnet.rpm https://dotnetcli.azureedge.net/dotnet/Sdk/$DOTNET_SDK_VERSION/dotnet-sdk-$DOTNET_SDK_VERSION-x64.rpm \
-    && dotnet_sha512='972124958ec5d8a5130dbc6c8fda5bbabe2b1d445027fc50375568e832fec2e006a97cd2d1aea461fce612b211f822d691392db7b28d82652bc09dd955f70967' \
+    && dotnet_sha512='80dc18404bff94b9407894e3a65029eefe70e2ff2f22cb929b589d9bd011b4a7450ffa8feaf8c560f3c767e4a2a30d6fe912945ec6988dc0e6f48ad60f41449b' \
     && echo "$dotnet_sha512  dotnet.rpm" | sha512sum -c - \
     \
     && curl -fSL --output apphost.rpm https://dotnetcli.azureedge.net/dotnet/Runtime/$DOTNET_VERSION/dotnet-apphost-pack-$DOTNET_VERSION-x64.rpm \
-    && dotnet_sha512='81f3da528e4350ae7c004bddf17f8e32672f4636640aa7b80ce0de48fe2bc1dcab0bff807166f78a2d936b14c16537c5e82bc69d12c308a1342e71e9fb928d21' \
+    && dotnet_sha512='7df4888e586c82c2fcf404850de6d74849d7c733483f317cd108231946d95fe19ea50239a37222d2470e1ba4d943de1e9754409b8cf0e1fab13f0509c2c8d378' \
     && echo "$dotnet_sha512  apphost.rpm" | sha512sum -c - \
     \
-    && curl -fSL --output targeting-pack.rpm https://dotnetcli.azureedge.net/dotnet/Runtime/6.0.33/dotnet-targeting-pack-6.0.33-x64.rpm \
-    && dotnet_sha512='55e5b2581eb2fac5b4d0c555213c28eb8b438b45f93080eec91b680cc2111377989d0c718e416f40368ed65c363fb0fcd3a54f05b0caa1a4677079fdaf1ddb11' \
+    && curl -fSL --output targeting-pack.rpm https://dotnetcli.azureedge.net/dotnet/Runtime/6.0.36/dotnet-targeting-pack-6.0.36-x64.rpm \
+    && dotnet_sha512='985c5cda972f50b4d518875641da030811980f930f98cdf46461f8c8089dd23191eaad6715d299ccddc49bd260c67ff4b59b3780a37fbd8a7aa7214af04155f4' \
     && echo "$dotnet_sha512  targeting-pack.rpm" | sha512sum -c - \
     \
-    && curl -fSL --output aspnetcore-targeting-pack.rpm https://dotnetcli.azureedge.net/dotnet/aspnetcore/Runtime/6.0.33/aspnetcore-targeting-pack-6.0.33-x64.rpm \
-    && dotnet_sha512='7c42fd91ae4a74e11f1134f972491920057dd82536b5d6da53758f4c8d8238ef67a78639012904a3da8412c578432dc27c5c5aa3e66b1cb0493fc78888131dab' \
+    && curl -fSL --output aspnetcore-targeting-pack.rpm https://dotnetcli.azureedge.net/dotnet/aspnetcore/Runtime/6.0.36/aspnetcore-targeting-pack-6.0.36-x64.rpm \
+    && dotnet_sha512='7bd9d2add955f467e5cc79805f827ea6edd94c9b6312ba8c749c60b04d845bc89f4a1b0b7ac13c873a36ac56317504796e754a47d4a8431f552270ea6b475f00' \
     && echo "$dotnet_sha512  aspnetcore-targeting-pack.rpm" | sha512sum -c - \
     \
     && curl -fSL --output netstandard-targeting-pack.rpm https://dotnetcli.azureedge.net/dotnet/Runtime/3.1.0/netstandard-targeting-pack-2.1.0-x64.rpm \
@@ -49,9 +49,9 @@ RUN curl -fSL --output dotnet.rpm https://dotnetcli.azureedge.net/dotnet/Sdk/$DO
     && dotnet help
 
 # Install PowerShell global tool
-RUN powershell_version=7.2.22 \
+RUN powershell_version=7.2.23 \
     && curl -fSL --output PowerShell.Linux.x64.$powershell_version.nupkg https://powershellinfraartifacts-gkhedzdeaghdezhr.z01.azurefd.net/tool/$powershell_version/PowerShell.Linux.x64.$powershell_version.nupkg \
-    && powershell_sha512='ca3501c4edd537e524f4f613ef0134f5068456af3945b0c5784ce1971504bb7362c8d5fcdb9149a644d56332cba04fac911e37965dc6e93ae755d6f89926e313' \
+    && powershell_sha512='9e3bfcf3684541e96f4a535f1053f8f2669f85dcebdd6849e8b548b069d65c4461cfe8f191c0ac17369e87414754788ecf447c18d54ba257d13ca1c4b0395d29' \
     && echo "$powershell_sha512  PowerShell.Linux.x64.$powershell_version.nupkg" | sha512sum -c - \
     && mkdir -p /usr/share/powershell \
     && dotnet tool install --add-source / --tool-path /usr/share/powershell --version $powershell_version PowerShell.Linux.x64 \

@@ -8,12 +8,10 @@ namespace Microsoft.DotNet.Docker.Tests
     {
         // Alpine
         public const string Alpine = "alpine";
-        public const string Alpine319 = $"{Alpine}3.19";
         public const string Alpine320 = $"{Alpine}3.20";
 
         // AzureLinux
         public const string AzureLinux = "azurelinux";
-
         public const string AzureLinuxDistroless = $"{AzureLinux}-distroless";
         public const string AzureLinux30 = $"{AzureLinux}3.0";
         public const string AzureLinux30Distroless = $"{AzureLinux30}-distroless";
@@ -26,7 +24,6 @@ namespace Microsoft.DotNet.Docker.Tests
 
         // Mariner
         public const string Mariner = "cbl-mariner";
-
         public const string MarinerDistroless = $"{Mariner}-distroless";
         public const string Mariner20 = $"{Mariner}2.0";
         public const string Mariner20Distroless = $"{Mariner20}-distroless";
@@ -49,6 +46,7 @@ namespace Microsoft.DotNet.Docker.Tests
         public const string ServerCoreLtsc2022 = $"{ServerCore}-ltsc2022";
 
         // Helpers
+        public const string DistrolessSuffix = "-distroless";
         public const string ChiseledSuffix = "-chiseled";
         public const string SlimSuffix = "-slim";
     }
