@@ -2,9 +2,11 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.DotNet.Docker.Tests.TestScenarios;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -24,11 +26,31 @@ namespace Microsoft.DotNet.Docker.Tests
 
         [DotNetTheory]
         [MemberData(nameof(GetImageData))]
-        public async Task VerifyAppScenario(ProductImageData imageData)
+        public async Task VerifyFxDependentAppScenario(ProductImageData imageData)
         {
-            using ConsoleAppScenario testScenario = new(imageData, DockerHelper, OutputHelper);
+            using ConsoleAppScenario testScenario =
+                new ConsoleAppScenario.FxDependent(imageData, DockerHelper, OutputHelper);
             await testScenario.ExecuteAsync();
         }
+
+        [DotNetTheory]
+        [MemberData(nameof(GetImageData))]
+        public async Task VerifyTestProjectScenario(ProductImageData imageData)
+        {
+            using ConsoleAppScenario testScenario =
+                new ConsoleAppScenario.TestProject(imageData, DockerHelper, OutputHelper);
+            await testScenario.ExecuteAsync();
+        }
+
+        [DotNetTheory]
+        [MemberData(nameof(GetImageData))]
+        public async Task VerifyGlobalizationScenario(ProductImageData imageData) =>
+            await VerifyGlobalizationScenarioBase(imageData);
+
+        [WindowsImageTheory]
+        [MemberData(nameof(GetImageData))]
+        public async Task VerifyNLSScenario(ProductImageData imageData) =>
+            await VerifyNlsScenarioBase(imageData);
 
         [DotNetTheory]
         [MemberData(nameof(GetImageData))]
@@ -40,16 +62,6 @@ namespace Microsoft.DotNet.Docker.Tests
             };
 
             base.VerifyCommonEnvironmentVariables(imageData, variables);
-        }
-
-        [DotNetTheory]
-        [MemberData(nameof(GetImageData))]
-        public void VerifyPackageInstallation(ProductImageData imageData)
-        {
-            VerifyExpectedInstalledRpmPackages(
-                imageData,
-                GetExpectedRpmPackagesInstalled(imageData)
-                    .Concat(RuntimeDepsImageTests.GetExpectedRpmPackagesInstalled(imageData)));
         }
 
         [LinuxImageTheory]
@@ -96,13 +108,5 @@ namespace Microsoft.DotNet.Docker.Tests
                 IsProductVersion = true
             };
         }
-
-        internal static string[] GetExpectedRpmPackagesInstalled(ProductImageData imageData) =>
-            new string[]
-                {
-                    "dotnet-host",
-                    $"dotnet-hostfxr-{imageData.VersionString}",
-                    $"dotnet-runtime-{imageData.VersionString}",
-                };
     }
 }

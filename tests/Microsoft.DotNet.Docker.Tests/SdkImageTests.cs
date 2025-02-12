@@ -8,7 +8,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using SharpCompress.Common;
 using SharpCompress.Readers;
@@ -55,22 +57,7 @@ namespace Microsoft.DotNet.Docker.Tests
         [MemberData(nameof(GetImageData))]
         public async void VerifyBlazorWasmScenario(ProductImageData imageData)
         {
-            // Test will fail on main branch since `dotnet workload install` does not work with an empty NuGet config.
-            bool failureExpected = !Config.IsNightlyRepo;
-
-            bool isAlpine = imageData.OS.StartsWith(OS.Alpine);
-
-            // Microsoft.NETCore.App.Runtime.Mono.linux-musl-arm* package does not exist
-            failureExpected |= isAlpine && imageData.IsArm;
-
             bool useWasmTools = true;
-
-            // `wasm-tools` workload does not work on .NET 6 with CBL Mariner 2.0.
-            // Re-enable when issue is resolved: https://github.com/dotnet/aspnetcore/issues/53469
-            if (imageData.OS.Contains(OS.Mariner) && imageData.Version.Major == 6)
-            {
-                useWasmTools = false;
-            }
 
             // `wasm-tools` workload does not work on ARM
             if (imageData.IsArm)
@@ -79,20 +66,13 @@ namespace Microsoft.DotNet.Docker.Tests
             }
 
             // `wasm-tools` is not supported on Alpine for .NET < 9 due to https://github.com/dotnet/sdk/issues/32327
-            if (isAlpine && (imageData.Version.Major == 6 || imageData.Version.Major == 8))
+            if (imageData.OS.StartsWith(OS.Alpine) && imageData.Version.Major == 8)
             {
                 useWasmTools = false;
             }
 
-            // Workaround to get tests passing in main while alternative solution to
-            // https://github.com/dotnet/dotnet-docker/issues/5704 is worked on
-            if (failureExpected)
-            {
-                return;
-            }
-
             using BlazorWasmScenario testScenario = new(imageData, DockerHelper, OutputHelper, useWasmTools);
-            await testScenario.ExecuteAsync(shouldThrow: failureExpected);
+            await testScenario.ExecuteAsync();
         }
 
         [LinuxImageTheory]
@@ -116,8 +96,8 @@ namespace Microsoft.DotNet.Docker.Tests
             string imageName = imageData.GetImage(ImageRepo, DockerHelper);
             string version = imageData.GetProductVersion(ImageRepo, ImageRepo, DockerHelper);
 
-            List<EnvironmentVariableInfo> variables = new()
-            {
+            List<EnvironmentVariableInfo> variables =
+            [
                 new EnvironmentVariableInfo("DOTNET_GENERATE_ASPNET_CERTIFICATE", "false"),
                 new EnvironmentVariableInfo("DOTNET_USE_POLLING_FILE_WATCHER", "true"),
                 new EnvironmentVariableInfo("NUGET_XMLDOC_MODE", "skip"),
@@ -128,9 +108,9 @@ namespace Microsoft.DotNet.Docker.Tests
                 },
                 AspnetImageTests.GetAspnetVersionVariableInfo(ImageRepo, imageData, DockerHelper),
                 RuntimeImageTests.GetRuntimeVersionVariableInfo(ImageRepo, imageData, DockerHelper),
-                new EnvironmentVariableInfo("DOTNET_NOLOGO", "true")
-            };
-            variables.AddRange(GetCommonEnvironmentVariables());
+                new EnvironmentVariableInfo("DOTNET_NOLOGO", "true"),
+                ..GetCommonEnvironmentVariables(),
+            ];
 
             if (imageData.SdkOS.StartsWith(OS.Alpine))
             {
@@ -168,13 +148,6 @@ namespace Microsoft.DotNet.Docker.Tests
         [MemberData(nameof(GetImageData))]
         public async Task VerifyDotnetFolderContents(ProductImageData imageData)
         {
-            // Skip test on CBL-Mariner with .NET 6.0. Since installation is done via RPM package, we just need to verify the package installation
-            // was done (handled by VerifyPackageInstallation test). There's no need to check the actual contents of the package.
-            if (imageData.OS.StartsWith(OS.Mariner) && imageData.Version.Major == 6)
-            {
-                return;
-            }
-
             IEnumerable<SdkContentFileInfo> actualDotnetFiles = GetActualSdkContents(imageData);
             IEnumerable<SdkContentFileInfo> expectedDotnetFiles = await GetExpectedSdkContentsAsync(imageData);
 
@@ -187,23 +160,6 @@ namespace Microsoft.DotNet.Docker.Tests
             bool filesMatch = FileHelper.CompareFiles(expectedFilesContext.Path, actualFilesContext.Path, OutputHelper);
 
             Assert.True(filesMatch, "Differences found in the dotnet folder contents.");
-        }
-
-        [DotNetTheory]
-        [MemberData(nameof(GetImageData))]
-        public void VerifyInstalledRpmPackages(ProductImageData imageData)
-        {
-            VerifyExpectedInstalledRpmPackages(
-                imageData,
-                new string[]
-                {
-                    $"dotnet-sdk-{imageData.VersionString}",
-                    $"dotnet-targeting-pack-{imageData.VersionString}",
-                    $"aspnetcore-targeting-pack-{imageData.VersionString}",
-                    $"dotnet-apphost-pack-{imageData.VersionString}",
-                    $"netstandard-targeting-pack-2.1"
-                }
-                .Concat(AspnetImageTests.GetExpectedRpmPackagesInstalled(imageData)));
         }
 
         [LinuxImageTheory]
@@ -227,17 +183,10 @@ namespace Microsoft.DotNet.Docker.Tests
         [MemberData(nameof(GetImageData))]
         public void VerifyGitInstallation(ProductImageData imageData)
         {
-            if (!DockerHelper.IsLinuxContainerModeEnabled && imageData.Version.Major == 6)
-            {
-                OutputHelper.WriteLine("Git is not installed on Windows containers older than .NET 6");
-                return;
-            }
-
             DockerHelper.Run(
                 image: imageData.GetImage(DotNetImageRepo.SDK, DockerHelper),
                 name: imageData.GetIdentifier($"git"),
-                command: "git version"
-            );
+                command: "git version");
         }
 
         /// <summary>
@@ -331,12 +280,22 @@ namespace Microsoft.DotNet.Docker.Tests
         private async Task<IEnumerable<SdkContentFileInfo>> GetExpectedSdkContentsAsync(ProductImageData imageData)
         {
             string sdkUrl = GetSdkUrl(imageData);
+            OutputHelper.WriteLine("Downloading SDK archive: " + sdkUrl);
 
             if (!s_sdkContentsCache.TryGetValue(sdkUrl, out IEnumerable<SdkContentFileInfo> files))
             {
                 string sdkFile = Path.GetTempFileName();
 
                 using HttpClient httpClient = new();
+
+                if (Config.IsInternal)
+                {
+                    httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                        "Basic",
+                        Convert.ToBase64String(Encoding.ASCII.GetBytes(string.Format("{0}:{1}", "",
+                            Config.InternalAccessToken))));
+                }
+
                 await httpClient.DownloadFileAsync(new Uri(sdkUrl), sdkFile);
 
                 files = EnumerateArchiveContents(sdkFile)
@@ -349,13 +308,29 @@ namespace Microsoft.DotNet.Docker.Tests
             return files;
         }
 
+        private static string GetSdkVersionFileLabel(string sdkBuildVersion, string dotnetVersion)
+        {
+            // This should be kept in sync with the template for computing the SDK version file:
+            // https://github.com/dotnet/dotnet-docker/blob/4f48d36a98187a6e350d54167ef5b568ccd3882f/eng/dockerfile-templates/sdk/Dockerfile.linux.install-sdk#L22-L31
+
+            bool isStableBranding = !sdkBuildVersion.Contains('-')
+                || sdkBuildVersion.Contains("-servicing")
+                || sdkBuildVersion.Contains("-rtm");
+
+            string sdkVersionFile = isStableBranding
+                ? Config.GetVariableValue($"sdk|{dotnetVersion}|product-version")
+                : sdkBuildVersion;
+
+            return sdkVersionFile;
+        }
+
         private string GetSdkUrl(ProductImageData imageData)
         {
-            bool isInternal = Config.IsInternal(imageData.VersionString);
+            bool isInternal = Config.IsInternal;
             string sdkBuildVersion = Config.GetBuildVersion(ImageRepo, imageData.VersionString);
             string sdkFileVersionLabel = isInternal
-                    ? imageData.GetProductVersion(ImageRepo, ImageRepo, DockerHelper)
-                    : sdkBuildVersion;
+                ? imageData.GetProductVersion(ImageRepo, ImageRepo, DockerHelper)
+                : GetSdkVersionFileLabel(sdkBuildVersion, imageData.VersionString);
 
             string osType = DockerHelper.IsLinuxContainerModeEnabled ? "linux" : "win";
             if (imageData.SdkOS.StartsWith(OS.Alpine))
@@ -374,10 +349,6 @@ namespace Microsoft.DotNet.Docker.Tests
             string fileType = DockerHelper.IsLinuxContainerModeEnabled ? "tar.gz" : "zip";
             string baseUrl = Config.GetBaseUrl(imageData.VersionString);
             string url = $"{baseUrl}/Sdk/{sdkBuildVersion}/dotnet-sdk-{sdkFileVersionLabel}-{osType}-{architecture}.{fileType}";
-            if (isInternal)
-            {
-                url += Config.SasQueryString;
-            }
 
             return url;
         }

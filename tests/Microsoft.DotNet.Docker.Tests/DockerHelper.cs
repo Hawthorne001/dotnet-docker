@@ -17,7 +17,6 @@ namespace Microsoft.DotNet.Docker.Tests
     public class DockerHelper
     {
         public static string DockerOS => GetDockerOS();
-        public static string DockerArchitecture => GetDockerArch();
         public static string ContainerWorkDir => IsLinuxContainerModeEnabled ? "/sandbox" : "c:\\sandbox";
         public static bool IsLinuxContainerModeEnabled => string.Equals(DockerOS, "linux", StringComparison.OrdinalIgnoreCase);
         public static string TestArtifactsDir { get; } = Path.Combine(Directory.GetCurrentDirectory(), "TestAppArtifacts");
@@ -73,18 +72,27 @@ namespace Microsoft.DotNet.Docker.Tests
             string dockerfile = Path.Combine(TestArtifactsDir, "Dockerfile.copy");
             string distrolessImageTag = imageData.GetImage(imageRepo, this);
 
-            // Use the runtime-deps image as the target of the filesyste copy.
+            // Use the runtime-deps image as the target of the filesystem copy.
             // Not all images are versioned the same as the mainline .NET products.
             // Use the version family (e.g. the .NET product family version) as the
             // version of the runtime-deps image get the correct image.
             ProductImageData runtimeDepsImageData = new()
             {
-                // Special case for .NET 8.0 Aspire Dashboard images - the Dashboard is in preview even though
-                // .NET 8.0 is not. The distroless helper image should not be built with the preview version.
                 Version = imageData.VersionFamily,
                 OS = imageData.OS,
                 Arch = imageData.Arch,
             };
+
+            // Special case for Aspire Dashboard 9.0 images:
+            // Aspire Dashboard 9.0 is based on .NET 8 since Azure Linux 3.0 does not yet have FedRAMP certification.
+            // Remove workaround once https://github.com/dotnet/dotnet-docker/issues/5375 is fixed.
+            if (imageRepo == DotNetImageRepo.Aspire_Dashboard && imageData.VersionFamily == ImageVersion.V9_0)
+            {
+                runtimeDepsImageData = runtimeDepsImageData with
+                {
+                    Version = ImageVersion.V8_0
+                };
+            }
 
             // Make sure we don't try to get an image that we don't need before we specify that we want the distro-full
             // version. The image might not be on disk. The correct, distro-full versino will be pulled in the helper
@@ -110,6 +118,8 @@ namespace Microsoft.DotNet.Docker.Tests
         }
 
         public static bool ContainerExists(string name) => ResourceExists("container", $"-f \"name={name}\"");
+
+        public static bool ContainerIsRunning(string name) => Execute($"inspect --format=\"{{{{.State.Running}}}}\" {name}") == "true";
 
         public void Copy(string src, string dest) => ExecuteWithLogging($"cp {src} {dest}");
 
@@ -222,12 +232,11 @@ namespace Microsoft.DotNet.Docker.Tests
         }
 
         private static string GetDockerOS() => Execute("version -f \"{{ .Server.Os }}\"");
-        private static string GetDockerArch() => Execute("version -f \"{{ .Server.Arch }}\"");
 
         public string GetImageUser(string image) => ExecuteWithLogging($"inspect -f \"{{{{ .Config.User }}}}\" {image}");
 
         public IDictionary<string, string> GetEnvironmentVariables(string image)
-{
+        {
             string envVarsStr = ExecuteWithLogging($"inspect -f \"{{{{json .Config.Env }}}}\" {image}");
             JArray envVarsArray = (JArray)JsonConvert.DeserializeObject(envVarsStr);
             return envVarsArray
@@ -289,20 +298,22 @@ namespace Microsoft.DotNet.Docker.Tests
             string runAsUser = null,
             bool skipAutoCleanup = false,
             bool useMountedDockerSocket = false,
-            bool silenceOutput = false)
+            bool silenceOutput = false,
+            bool tty = true)
         {
             string cleanupArg = skipAutoCleanup ? string.Empty : " --rm";
-            string detachArg = detach ? " -d -t" : string.Empty;
+            string detachArg = detach ? " -d" : string.Empty;
+            string ttyArg = detach && tty ? " -t" : string.Empty;
             string userArg = runAsUser != null ? $" -u {runAsUser}" : string.Empty;
             string workdirArg = workdir == null ? string.Empty : $" -w {workdir}";
             string mountedDockerSocketArg = useMountedDockerSocket ? " -v /var/run/docker.sock:/var/run/docker.sock" : string.Empty;
             if (silenceOutput)
             {
                 return Execute(
-                    $"run --name {name}{cleanupArg}{workdirArg}{userArg}{detachArg}{mountedDockerSocketArg} {optionalRunArgs} {image} {command}");
+                    $"run --name {name}{cleanupArg}{workdirArg}{userArg}{detachArg}{ttyArg}{mountedDockerSocketArg} {optionalRunArgs} {image} {command}");
             }
             return ExecuteWithLogging(
-                $"run --name {name}{cleanupArg}{workdirArg}{userArg}{detachArg}{mountedDockerSocketArg} {optionalRunArgs} {image} {command}");
+                $"run --name {name}{cleanupArg}{workdirArg}{userArg}{detachArg}{ttyArg}{mountedDockerSocketArg} {optionalRunArgs} {image} {command}");
         }
 
         /// <summary>

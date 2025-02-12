@@ -31,9 +31,9 @@ param(
     [ValidateSet("runtime", "runtime-deps", "aspnet", "sdk", "pre-build", "sample", "image-size", "monitor", "aspire-dashboard")]
     [string[]]$TestCategories = @("runtime", "runtime-deps", "aspnet", "sdk", "monitor", "aspire-dashboard"),
 
-    [securestring]$SasQueryString,
+    [string]$CustomTestFilter,
 
-    [securestring]$NuGetFeedPassword
+    [string]$InternalAccessToken
 )
 
 Import-Module -force $PSScriptRoot/../eng/DependencyManagement.psm1
@@ -123,12 +123,9 @@ Try {
     $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = 1
     $env:DOTNET_MULTILEVEL_LOOKUP = '0'
 
-    if ($SasQueryString) {
-        $env:SAS_QUERY_STRING = ConvertFrom-SecureString $SasQueryString -AsPlainText
-    }
-
-    if ($NuGetFeedPassword) {
-        $env:NUGET_FEED_PASSWORD = ConvertFrom-SecureString $NuGetFeedPassword -AsPlainText
+    if ($InternalAccessToken) {
+        $env:INTERNAL_ACCESS_TOKEN = $InternalAccessToken
+        $env:INTERNAL_TESTING = 1
     }
 
     $testFilter = ""
@@ -148,9 +145,15 @@ Try {
             exit;
         }
 
-        $testFilter = "--filter `"$testFilter`""
+        if ($CustomTestFilter)
+        {
+            $testFilter = "$CustomTestFilter&($testFilter)"
+        }
+
+        $testFilter = "--filter '$testFilter'"
     }
 
+    Write-Host "`nRunning tests with $testFilter`n"
     Exec "$DotnetInstallDir/dotnet test $testFilter --logger:trx"
 
     if ($TestCategories.Contains('image-size')) {
