@@ -24,44 +24,62 @@ namespace Microsoft.DotNet.Docker.Tests
 
         [DotNetTheory]
         [MemberData(nameof(GetImageData))]
-        public async Task VerifyAppScenario(ProductImageData imageData)
+        public async Task VerifyFxDependentAppScenario(ProductImageData imageData)
         {
-            using ProjectTemplateTestScenario scenario = imageData.ImageVariant.HasFlag(DotNetImageVariant.Composite)
-                ? new WebScenarioComposite(imageData, DockerHelper, OutputHelper)
-                : new WebScenario(imageData, DockerHelper, OutputHelper);
+            if (Config.IsNightlyRepo && imageData.ImageVariant.HasFlag(DotNetImageVariant.Composite))
+            {
+                OutputHelper.WriteLine("Skip test due to https://github.com/dotnet/dotnet-docker/issues/4834");
+                return;
+            }
+
+            using WebScenario scenario = new WebScenario.FxDependent(imageData, DockerHelper, OutputHelper);
             await scenario.ExecuteAsync();
         }
 
         [DotNetTheory]
         [MemberData(nameof(GetImageData))]
+        public async Task VerifyGlobalizationScenario(ProductImageData imageData)
+        {
+            if (Config.IsNightlyRepo && imageData.ImageVariant.HasFlag(DotNetImageVariant.Composite))
+            {
+                OutputHelper.WriteLine("Skip test due to https://github.com/dotnet/dotnet-docker/issues/4834");
+                return;
+            }
+
+            await VerifyGlobalizationScenarioBase(imageData);
+        }
+
+        [WindowsImageTheory]
+        [MemberData(nameof(GetImageData))]
+        public async Task VerifyNLSScenario(ProductImageData imageData) =>
+            await VerifyNlsScenarioBase(imageData);
+
+        [DotNetTheory]
+        [MemberData(nameof(GetImageData))]
         public void VerifyEnvironmentVariables(ProductImageData imageData)
         {
-            List<EnvironmentVariableInfo> variables = new();
+            List<EnvironmentVariableInfo> variables = [];
+
+            EnvironmentVariableInfo runtimeVersionInfo =
+                RuntimeImageTests.GetRuntimeVersionVariableInfo(ImageRepo, imageData, DockerHelper);
 
             // Skip runtime version check due to https://github.com/dotnet/dotnet-docker/issues/4834.
             // Re-enable when fixed.
-            if (imageData.ImageVariant != DotNetImageVariant.Composite)
+            if (imageData.ImageVariant.HasFlag(DotNetImageVariant.Composite))
             {
-                variables.Add(RuntimeImageTests.GetRuntimeVersionVariableInfo(ImageRepo, imageData, DockerHelper));
+                runtimeVersionInfo = runtimeVersionInfo with { AllowAnyValue = true };
             }
 
-            EnvironmentVariableInfo aspnetVersionVariableInfo = GetAspnetVersionVariableInfo(ImageRepo, imageData, DockerHelper);
+            variables.Add(runtimeVersionInfo);
+
+            EnvironmentVariableInfo aspnetVersionVariableInfo =
+                GetAspnetVersionVariableInfo(ImageRepo, imageData, DockerHelper);
             if (aspnetVersionVariableInfo != null)
             {
                 variables.Add(aspnetVersionVariableInfo);
             }
 
             base.VerifyCommonEnvironmentVariables(imageData, variables);
-        }
-
-        [DotNetTheory]
-        [MemberData(nameof(GetImageData))]
-        public void VerifyPackageInstallation(ProductImageData imageData)
-        {
-            VerifyExpectedInstalledRpmPackages(
-                    imageData,
-                    GetExpectedRpmPackagesInstalled(imageData)
-                        .Concat(RuntimeImageTests.GetExpectedRpmPackagesInstalled(imageData)));
         }
 
         [LinuxImageTheory]
@@ -109,11 +127,5 @@ namespace Microsoft.DotNet.Docker.Tests
                 IsProductVersion = true
             };
         }
-
-        internal static string[] GetExpectedRpmPackagesInstalled(ProductImageData imageData) =>
-            new string[]
-                {
-                    $"aspnetcore-runtime-{imageData.VersionString}"
-                };
     }
 }

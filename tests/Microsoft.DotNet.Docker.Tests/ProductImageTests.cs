@@ -9,6 +9,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using FluentAssertions;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -133,10 +134,9 @@ namespace Microsoft.DotNet.Docker.Tests
 
         protected void VerifyNonRootUID(ProductImageData imageData)
         {
-            if ((imageData.Version.Major == 6 && (!imageData.IsDistroless || imageData.OS.StartsWith(OS.Mariner)))
-                || imageData.IsWindows)
+            if (imageData.IsWindows)
             {
-                OutputHelper.WriteLine("UID check is only relevant for Linux images running .NET versions >= 8.0 and distroless images besides CBL Mariner.");
+                OutputHelper.WriteLine("UID check is only relevant for Linux images");
                 return;
             }
 
@@ -166,53 +166,6 @@ namespace Microsoft.DotNet.Docker.Tests
             Assert.True(uid <= 60000);
         }
 
-        private IEnumerable<string> GetInstalledRpmPackages(ProductImageData imageData)
-        {
-            string rootPath = imageData.IsDistroless ? "/rootfs" : "/";
-            // Get list of installed RPM packages
-            string command = $"-c \"rpm -qa -r {rootPath} | sort\"";
-
-            string imageTag;
-            if (imageData.IsDistroless)
-            {
-                imageTag = DockerHelper.BuildDistrolessHelper(ImageRepo, imageData, rootPath);
-            }
-            else
-            {
-                imageTag = imageData.GetImage(ImageRepo, DockerHelper);
-            }
-
-            string installedPackages = DockerHelper.Run(
-                image: imageTag,
-                command: command,
-                name: imageData.GetIdentifier("PackageInstallation"),
-                optionalRunArgs: "--entrypoint /bin/sh");
-
-            return installedPackages.Split(Environment.NewLine);
-        }
-
-        protected void VerifyExpectedInstalledRpmPackages(
-            ProductImageData imageData, IEnumerable<string> expectedPackages)
-        {
-            if ((!imageData.OS.StartsWith(OS.Mariner) && !imageData.OS.StartsWith(OS.AzureLinux))
-                || imageData.IsDistroless || imageData.Version.Major > 6)
-            {
-                return;
-            }
-
-            if (imageData.Arch == Arch.Arm64)
-            {
-                OutputHelper.WriteLine("Skip test until Arm64 Dockerfiles install packages instead of tarballs");
-                return;
-            }
-
-            foreach (string expectedPackage in expectedPackages)
-            {
-                bool installed = GetInstalledRpmPackages(imageData).Any(pkg => pkg.StartsWith(expectedPackage));
-                Assert.True(installed, $"Package '{expectedPackage}' is not installed.");
-            }
-        }
-
         public static IEnumerable<EnvironmentVariableInfo> GetCommonEnvironmentVariables()
         {
             yield return new EnvironmentVariableInfo("DOTNET_RUNNING_IN_CONTAINER", "true");
@@ -231,13 +184,15 @@ namespace Microsoft.DotNet.Docker.Tests
             IEnumerable<string> expectedPackages = GetExpectedPackages(imageData, imageRepo);
             IEnumerable<string> actualPackages = GetInstalledPackages(imageData, imageRepo, dockerHelper, extraExcludePaths);
 
-            ComparePackages(expectedPackages, actualPackages, imageData.IsDistroless, outputHelper);
+            string imageName = imageData.GetImage(imageRepo, dockerHelper, skipPull: true);
+            ComparePackages(expectedPackages, actualPackages, imageData.IsDistroless, imageName, outputHelper);
         }
 
         internal static void ComparePackages(
             IEnumerable<string> expectedPackages,
             IEnumerable<string> actualPackages,
             bool isDistroless,
+            string imageName,
             ITestOutputHelper outputHelper)
         {
             outputHelper.WriteLine($"Expected Packages: [ {string.Join(", ", expectedPackages)} ]");
@@ -246,19 +201,14 @@ namespace Microsoft.DotNet.Docker.Tests
             if (isDistroless)
             {
                 outputHelper.WriteLine($"Actual Packages: [ {string.Join(", ", actualPackages)} ]");
-                Assert.Equal(expectedPackages, actualPackages);
+                actualPackages.Should().BeEquivalentTo(expectedPackages,
+                    because: $"image {imageName} is distroless");
                 return;
             }
 
             // Verify satisfy .NET dependencies on non-distroless images.
             // There will be additional packages from the distro.
-            IEnumerable<string> missingPackages = expectedPackages.Except(actualPackages);
-            if (missingPackages.Any())
-            {
-                outputHelper.WriteLine($"Missing packages: [ {string.Join(", ", missingPackages)} ]");
-            }
-
-            Assert.Empty(missingPackages);
+            expectedPackages.Should().BeSubsetOf(actualPackages, because: $"image {imageName} is not distroless");
         }
 
         internal static IEnumerable<string> GetInstalledPackages(
@@ -351,8 +301,7 @@ namespace Microsoft.DotNet.Docker.Tests
                 expectedPackages = [..expectedPackages, ..GetDistrolessBasePackages(imageData)];
             }
 
-            if (imageData.ImageVariant.HasFlag(DotNetImageVariant.Extra)
-                || (imageRepo == DotNetImageRepo.SDK && imageData.Version.Major != 6))
+            if (imageData.ImageVariant.HasFlag(DotNetImageVariant.Extra) || imageRepo == DotNetImageRepo.SDK)
             {
                 expectedPackages = [..expectedPackages, ..GetExtraPackages(imageData)];
             }
@@ -364,6 +313,8 @@ namespace Microsoft.DotNet.Docker.Tests
             {
                 { OS: string os } when os.Contains(OS.AzureLinux) => new[]
                     {
+                        "SymCrypt",
+                        "SymCrypt-OpenSSL",
                         "azurelinux-release",
                         "distroless-packages-minimal",
                         "filesystem",
@@ -389,38 +340,30 @@ namespace Microsoft.DotNet.Docker.Tests
         {
             IEnumerable<string> packages = imageData switch
             {
-                { OS: OS.Mariner20Distroless, Version: ImageVersion version }
-                        when version.Major == 6 =>
-                    [
-                        "e2fsprogs-libs",
-                        "glibc",
-                        "krb5",
-                        "libgcc",
-                        "openssl",
-                        "openssl-libs",
-                        "prebuilt-ca-certificates",
-                    ],
-                { OS: OS.Mariner20, Version: ImageVersion version }
-                        when version.Major == 6 =>
-                    [
-                        "glibc",
-                        "icu",
-                        "krb5",
-                        "libgcc",
-                        "openssl-libs",
-                    ],
                 { OS: string os } when os.Contains(OS.Mariner) || os.Contains(OS.AzureLinux) =>
                     [
                         "glibc",
                         "libgcc",
+                        "openssl",
                         "openssl-libs",
                     ],
                 { OS: string os } when os.Contains(OS.Jammy) =>
                     [
                         "ca-certificates",
+                        "gcc-12-base",
                         "libc6",
                         "libgcc-s1",
                         "libssl3",
+                        "openssl",
+                    ],
+                { OS: OS.NobleChiseled } =>
+                    [
+                        "ca-certificates",
+                        "gcc-14-base",
+                        "gcc-14",
+                        "libc6",
+                        "libgcc-s1",
+                        "libssl3t64",
                         "openssl",
                     ],
                 { OS: string os } when os.Contains(OS.Noble) =>
@@ -431,15 +374,6 @@ namespace Microsoft.DotNet.Docker.Tests
                         "libgcc-s1",
                         "libssl3t64",
                         "openssl",
-                    ],
-                { OS: OS.Focal } =>
-                    [
-                        "ca-certificates",
-                        "libc6",
-                        "libgcc-s1",
-                        "libgssapi-krb5-2",
-                        "libicu66",
-                        "libssl1.1",
                     ],
                 { OS: string os } when os.Contains(OS.Alpine) =>
                     [
@@ -456,21 +390,21 @@ namespace Microsoft.DotNet.Docker.Tests
                         "libssl3",
                         "tzdata",
                     ],
-                { OS: OS.BullseyeSlim } =>
+                { OS: OS.TrixieSlim } =>
                     [
                         "ca-certificates",
                         "libc6",
-                        "libgcc-s1", // Listed as libgcc1 in the Dockerfile
-                        "libgssapi-krb5-2",
-                        "libicu67",
-                        "libssl1.1",
+                        "libgcc-s1",
+                        "libicu72",
+                        "libssl3t64",
+                        "tzdata",
                     ],
                 _ => throw new NotSupportedException()
             };
 
             // zlib is not required for .NET 9+
             // https://github.com/dotnet/dotnet-docker/issues/5687
-            if (imageData.Version.Major <= 8)
+            if (imageData.Version.Major == 8)
             {
                 packages = [..packages, GetZLibPackage(imageData.OS)];
             }
@@ -498,7 +432,13 @@ namespace Microsoft.DotNet.Docker.Tests
                         "icu",
                         "tzdata"
                     },
-                { OS: string os } when os.Contains(OS.ChiseledSuffix) => new[]
+                { OS: OS.NobleChiseled } => new[]
+                    {
+                        "libicu74",
+                        "tzdata-legacy",
+                        "tzdata"
+                    },
+                { OS: OS.JammyChiseled } => new[]
                     {
                         "libicu70",
                         "tzdata"

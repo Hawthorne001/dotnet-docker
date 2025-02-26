@@ -1,19 +1,19 @@
 ARG REPO=mcr.microsoft.com/dotnet/runtime-deps
-FROM $REPO:8.0.8-alpine3.20-arm32v7
+FROM $REPO:8.0.13-alpine3.20-arm32v7
 
 # .NET globalization APIs will use invariant mode by default because DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true is set
 # by the base runtime-deps image. See https://aka.ms/dotnet-globalization-alpine-containers for more information.
 
 ENV \
     # .NET Runtime version
-    DOTNET_VERSION=8.0.8 \
+    DOTNET_VERSION=8.0.13 \
     # ASP.NET Core version
-    ASPNET_VERSION=8.0.8
+    ASPNET_VERSION=8.0.13
 
 
 # Install ASP.NET Composite Runtime
-RUN wget -O dotnet.tar.gz https://dotnetcli.azureedge.net/dotnet/aspnetcore/Runtime/$ASPNET_VERSION/aspnetcore-runtime-composite-$ASPNET_VERSION-linux-musl-arm.tar.gz \
-    && dotnet_sha512='f115d139bbd635eb83818d78caa85b68725a1c35404985c077a1a0c696698cf4e6068635a25b053251139ddf80738acbe97168c109fc890f1dea4fcf9df86cdc' \
+RUN wget -O dotnet.tar.gz https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/$ASPNET_VERSION/aspnetcore-runtime-composite-$ASPNET_VERSION-linux-musl-arm.tar.gz \
+    && dotnet_sha512='9e961a15e8df2d6acb58cf246d299905e48b3280539b54d616cf9f550d5e66b31f9737e90f52d323bfef57753404b22e4a2d1c5f72db2525d3cc6de0d828eb89' \
     && echo "$dotnet_sha512  dotnet.tar.gz" | sha512sum -c - \
     && mkdir -p /usr/share/dotnet \
     && tar -oxzf dotnet.tar.gz -C /usr/share/dotnet \
