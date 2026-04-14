@@ -3,7 +3,7 @@ ARG REPO=mcr.microsoft.com/dotnet/aspnet
 FROM arm32v7/buildpack-deps:jammy-curl AS installer
 
 # Install .NET SDK
-RUN dotnet_sdk_version=10.0.201 \
+RUN dotnet_sdk_version=10.0.202 \
     && curl --fail --show-error --location \
         --remote-name https://builds.dotnet.microsoft.com/dotnet/Sdk/$dotnet_sdk_version/dotnet-sdk-$dotnet_sdk_version-linux-arm.tar.gz \
         --remote-name https://builds.dotnet.microsoft.com/dotnet/Sdk/$dotnet_sdk_version/dotnet-sdk-$dotnet_sdk_version-linux-arm.tar.gz.sha512 \
@@ -16,7 +16,7 @@ RUN dotnet_sdk_version=10.0.201 \
 
 
 # .NET SDK image
-FROM $REPO:10.0.5-noble-arm32v7
+FROM $REPO:10.0.6-noble-arm32v7
 
 ENV \
     # Do not generate certificate
@@ -24,7 +24,7 @@ ENV \
     # Do not show first run text
     DOTNET_NOLOGO=true \
     # SDK version
-    DOTNET_SDK_VERSION=10.0.201 \
+    DOTNET_SDK_VERSION=10.0.202 \
     # Enable correct mode for dotnet watch (only mode supported in a container)
     DOTNET_USE_POLLING_FILE_WATCHER=true \
     # Skip extraction of XML docs - generally not useful within an image/container - helps performance
@@ -49,9 +49,9 @@ RUN ln -s /usr/share/dotnet/dnx /usr/bin/dnx \
     && dotnet help
 
 # Install PowerShell global tool
-RUN powershell_version=7.6.0-preview.4 \
+RUN powershell_version=7.6.0 \
     && curl --fail --show-error --location --output PowerShell.Linux.arm32.$powershell_version.nupkg https://powershellinfraartifacts-gkhedzdeaghdezhr.z01.azurefd.net/tool/$powershell_version/PowerShell.Linux.arm32.$powershell_version.nupkg \
-    && powershell_sha512='32e410abb44dcd6ba943fa8c7367a88a6c0c4e3ac0a67756fb5919139c980f1a3d66a3b055e6b2292a154c9eede22003b0b85605c101e3e6fa89fd71b7d44a7f' \
+    && powershell_sha512='e07b1c4d67fa6415670f7e19202ac9e9c5c94991530a85b1c1e885df9da6f67a3c900c9989e88cfb17c12eb6e82414db44483e043f902ba8510e999c395849c8' \
     && echo "$powershell_sha512  PowerShell.Linux.arm32.$powershell_version.nupkg" | sha512sum -c - \
     && mkdir --parents /usr/share/powershell \
     && dotnet tool install --add-source / --tool-path /usr/share/powershell --version $powershell_version PowerShell.Linux.arm32 \
